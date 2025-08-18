@@ -1,0 +1,47 @@
+#!ansible-playbook -vv
+## tasks/s3-tools.yml
+## Setup s3 utilities.
+## Author: Ctrl-S
+## [Fedora]
+---
+- name: '[Fedora] System packages: Amazon s3util'
+  ansible.builtin.dnf:
+    state: latest
+    name:
+      - s3cmd
+  when: ansible_facts['os_family'] == 'RedHat'
+
+
+# - name: '[Fedora] Python packages: Amazon s3util'
+#   ansible.builtin.pip:
+#     state: latest
+#     name:
+
+
+# - name: 'Configure s3cmd'
+#   with_items: {{s3cmd_admin_users}}
+#   block:
+#   - name: "Find out if s3cmd is configured"
+#     ansible.builtin.stat:
+#       path: "$HOME/.s3cfg-weed"
+#     become: yes
+#     become_user: {{item}}
+#     register: s3cmd_conf_check
+
+#   - name: 's3cmd config file'
+#     ansible.builtin.copy:
+#       src: 'files/s3cfg-weed'
+#       dest: "$HOME/.s3cfg-weed"
+#       mode: "u=rwx,g=,o=" # Contains secrets.
+#       owner: "{{ item }}"
+#       group: "{{ item }}"
+#       when: not s3cmd_conf_check.stat.exists
+
+#   - name: 'weed bash aliases'
+#     ansible.builtin.copy:
+#       src: 'files/bash_aliases_seaweedfs.sh'
+#       dest: "$HOME/.bash_aliases_seaweedfs.sh"
+#       mode: "u=rwx,g=,o=" # Contains secrets.
+#       owner: "{{ item }}"
+#       group: "{{ item }}"
+#       when: not s3cmd_conf_check.stat.exists

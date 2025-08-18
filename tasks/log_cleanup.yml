@@ -1,0 +1,44 @@
+## tasks/log_cleanup.yml
+## Clear old weed logfiles (like logrotate)
+---
+#
+## ==========< Log cleanup automation >========== ##
+- name: 'Seaweedfs logfile cleanup'
+  role: "0x0i.systemd" ## https://github.com/0x0I/ansible-role-systemd
+  ignore_errors: "{{ ansible_check_mode }}"
+  tags:
+    - units
+    - logfile_cleanup
+  vars:
+    unit_config:
+      - name: 'seaweedfs_logfile_cleanup'
+        ## This service should NOT be run every time playbook is run.
+        ## path: /etc/systemd/system/seaweedfs_logfile_cleanup.service
+        enabled: true
+        state: "stopped" # Able to run but not running when playbook reloads services.
+        Unit:
+          Description: "Seaweedfs logfile cleanup"
+        Service:
+          Type: oneshot
+          User: "root" # Needs to be able to delete FUSE mount logfiles.
+          WorkingDirectory: "{{ weed_conf_dir }}"
+          ExecStart: >-
+            {{ general_dir }}/scripts/log-cleanup.cronjob.sh
+        Install:
+          WantedBy: multi-user.target
+
+      - name: 'seaweedfs_logfile_cleanup'
+        ## This timer should NOT be fired every time playbook is run.
+        ## path: /etc/systemd/system/seaweedfs_logfile_cleanup.timer
+        enabled: true
+        type: timer
+        Unit:
+          Description: "Seaweedfs logfile cleanup"
+        Timer:
+          # OnBootSec: 7d
+          OnUnitInactiveSec: 7d
+          Unit: seaweedfs_logfile_cleanup.service
+        Install:
+          WantedBy: multi-user.target
+## ==========< /Log cleanup automation >========== ##
+#

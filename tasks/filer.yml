@@ -1,0 +1,57 @@
+## tasks/filer.yml
+---
+- name: 'Seaweedfs filer dirs exist'
+  ansible.builtin.file:
+    state: 'directory'
+    owner: "{{ user }}"
+    group: "{{ group }}"
+    mode: 'u=rwX,g=,o=' ## Only seaweedfs itself ever accesses these.
+    path: "{{ item.dir | mandatory }}"
+  with_items: "{{ weed_filers }}"
+
+
+- name: 'Systemd units for filer'
+  role: "0x0i.systemd"
+  ## https://github.com/0x0I/ansible-role-systemd
+  ## $ ansible-galaxy install 0x0i.systemd
+  ## https://github.com/0x0I/ansible-role-systemd/blob/master/templates/systemd.unit.j2
+  ## https://man7.org/linux/man-pages/man5/systemd.service.5.html
+  ## https://man7.org/linux/man-pages/man5/systemd.exec.5.html
+  ## https://man7.org/linux/man-pages/man7/environ.7.html
+  ignore_errors: "{{ ansible_check_mode }}"
+    ## for `TASK [0x0i.systemd : Render unit configuration]`
+    ## `..."msg": "AnsibleUndefinedVariable: 'None' has no attribute 'items'...`
+    ## May generate error in check mode about undefined var ({{ restart_item.dest | basename }})
+  tags: units
+  vars:
+    unit_config:
+    - name: "{{ item.name | mandatory }}"
+      enabled: "yes"
+      state: "started"
+      Unit:
+        Description: "{{ item.description | default() }}" # TODO: ip:port/disk
+      Service:
+        Type: simple
+        Restart: always
+        RestartSec: "{{ item.restartsec | default(service_restartsec) }}"
+        User: "{{ user }}"
+        Group: "{{ group }}"
+        Environment: >-
+          "WEED_LEVELDB2_ENABLED=true"
+          "WEED_LEVELDB2_DIR={{ general_dir }}/{{ item.name | mandatory }}/leveldb2/"
+        WorkingDirectory: "{{ weed_conf_dir }}"
+        ExecStart: >-
+          {{ binary }}
+          -v={{ log_level }}
+          -alsologtostderr={{ log_stderr_bool }}
+          -stderrthreshold={{ log_stderr_threshold }}
+          -logdir={{ logdir | mandatory }}/{{ item.name | mandatory }}
+          filer
+          -master=localhost:9333
+          -port={{ item.port | mandatory }}
+          -port.grpc={{ item.port | default( sum(item.port, 10000)) }}
+        LimitNOFILE: 'infinity'
+        LimitNPROC: 'infinity'
+      Install:
+        WantedBy: multi-user.target
+  with_items: "{{ weed_filers }}"

@@ -1,0 +1,66 @@
+---
+- name: 'Seaweedfs config dirs exist'
+  ansible.builtin.file:
+    state: 'directory'
+    owner: "root"
+    group: "{{ group }}"
+    mode: 'u=rwX,g=rX,o=' # Weed group needs read to use weed CLI utils.
+    path: "{{ item }}"
+  with_items:
+    - "{{ weed_conf_dir }}"
+- name: 'master.toml in place'
+  ansible.builtin.copy:
+    src: "files/weed-config/master.toml"
+    dest: "{{weed_conf_dir}}/master.toml"
+    mode: "u=rw,g=r,o=r"
+    owner: "root"
+    group: "{{ group }}"
+    backup: true
+
+- name: 'filer.toml in place'
+  ansible.builtin.copy:
+    src: "files/weed-config/filer.toml"
+    dest: "{{weed_conf_dir}}/filer.toml"
+    mode: "u=rw,g=r,o=" # Contains secrets.
+    owner: "root"
+    group: "{{ group }}"
+    backup: true
+
+- name: 's3_conf.json in place'
+  ansible.builtin.copy: ## SeaweedFS S3 API config JSON
+    src: "files/weed-config/s3_conf.json"
+    dest: "{{weed_conf_dir}}/s3_conf.json"
+    mode: "u=rw,g=r,o=" # Contains secrets.
+    owner: "root"
+    group: "{{ group }}"
+    backup: true
+
+# - name: 'security.toml in place'
+#   ansible.builtin.copy:
+#     src: "files/weed-config/security.toml"
+#     dest: "{{weed_conf_dir}}/security.toml"
+#     mode: "u=rw,g=r,o=" # Contains secrets.
+#     owner: "root"
+#     group: "{{ group }}"
+#     backup: true
+
+# - name: 'Certificates in place'
+#   ansible.builtin.copy:
+#     src: "files/certs/{{item}}"
+#     dest: "{{weed_conf_dir}}/{{item}}"
+#     mode: "u=r,g=r,o=" # Contains secrets.
+#     owner: "root"
+#     group: "{{ group }}"
+#     backup: true
+#   with_items:
+#     - 'SeaweedFS_CA.crt'
+#     - 'volume.crt'
+#     - 'volume.key'
+#     - 'master.crt'
+#     - 'master.key'
+#     - 'filer.crt'
+#     - 'filer.key'
+#     - 'client.crt'
+#     - 'client.key'
+#   tags: security
+## ==========< /Weed config >========== ##

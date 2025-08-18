@@ -1,0 +1,81 @@
+## defaults/main.yml
+## Default values for role variables.
+---
+# defaults file for seaweedfs
+
+## User and group for everything seaweedfs related that does not require root:
+user: 'seaweedfs' ## System user seaweedfs runs as.
+group: 'seaweedfs' ## System group seaweedfs runs as.
+uid: 420420 ## System UID seaweedfs runs as.
+gid: 420420 ## System GID seaweedfs runs as.
+# Weed dirs
+weed_conf_dir: "/etc/seaweedfs/" ## Dir weed config files go. Doubles as service PWD
+binary: "/usr/local/bin/weed" ## Seaweedfs binary filepath.
+logdir: "/var/log/seaweedfs" ## Base dir weed log files go.
+general_dir: "/var/lib/seaweedfs" ## Dir used for general purpose.
+log_level: '1' ## Higher number is more verbose. Uses glog.
+log_stderr_bool: '0' # -alsologtostderr=FOO - log to standard error as well as files (default true)
+log_stderr_threshold: '2' # -stderrthreshold value - logs at or above this threshold go to stderr
+rack: None ## Used for prefferential access shit.
+datacenter: None ## Used for prefferential access shit.
+
+## Time services should wait before attempting to restart.
+## Systemd.unit RestartSec=20s
+service_restartsec: 20
+
+## == Install software. ==
+## seaweedfs - install_seaweedfs_bin_conditional.yml
+weed_install_work_dir: "/var/lib/seaweedfs/install_weed"
+weed_latest_release: "3.80"
+## https://github.com/chrislusf/seaweedfs/releases/download/2.52/linux_amd64_large_disk.tar.gz
+## https://github.com/chrislusf/seaweedfs/releases/download/2.68/linux_amd64_large_disk.tar.gz
+## https://github.com/chrislusf/seaweedfs/releases/download/2.69/windows_amd64_large_disk.zip
+## Check for latest version here: https://github.com/chrislusf/seaweedfs/releases/
+
+## certstrap - install_strap_bin.*.yml
+certstrap_install_work_dir: "/var/lib/seaweedfs/install_certstrap"
+certstrap_latest_release: 'v1.3.0'
+## Check for latest version here: https://github.com/square/certstrap/releases
+
+## Users who can use weed
+weed_permitted_users:
+  - 'seaweedfs'
+
+filer_backup_master: 'localhost:9333' ## Address to master for automated filer backup (-master=foo).
+filer_backup_filer: 'localhost:8888' ## Address to master for automated filer backup (-filer=foo).
+
+## tasks/filer-meta-bkup.yml
+## templates/backup-filer.sh.j2
+filer_backup_filepath: ''  ## Filepath to place filer file.Filepath to place filer file.
+
+## tasks/filer-meta-bkup-multidest.yml
+## templates/backup-filer-multidest.cronjob.sh.j2
+## Absolute dirpath where filermeta backup should be staged to before being copied to final locations:
+filermeta_backup_tempfile: '' # Absolute filepath
+## Absolute paths to dirs where filermeta backups should be kept
+filermeta_backup_destdirs: []
+## Rclone cloud upload
+## --config string Config file (default "$HOME/.config/rclone/rclone.conf")
+rclone_config_filepath: '/etc/seaweedfs/rclone.conf'
+rclone_rc_addr: localhost:5420 # To avoid rclone --rc port conflicts. https://rclone.org/rc/#rc-addr-ip
+rclone_bwlimit: '10M' ## https://rclone.org/flags/
+filermeta_backup_rclone_dests: [] ## as used by $rclone copy /foo/bar/myfile DEST
+
+## Logfile cleanup cronjob
+## tasks/log_cleanup.yml
+## templates/log-cleanup.sh.j2
+max_logfile_age_cmin: '43200' # Only remove logfiles with creation time older than this.
+max_logfile_age_mtime: '43200' # Only remove logfiles with modification time older than this.
+
+## Upgrade-time precautions
+## Path to stash a timestamped file metadata backup on playbook run
+## i.e. writes to: {{onupgrade_bkup_dir}}/upgrade.@{{ansible_facts.date_time.epoch}}.filermeta
+## This is kept until manually removed.
+onupgrade_bkup_dir: "/var/lib/seaweedfs/onupgrade-bkup/"
+
+
+## New-style definitions for role.
+weed_masters: []
+weed_filers: []
+weed_volumes: []
+weed_mounts: []

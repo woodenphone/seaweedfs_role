@@ -1,0 +1,117 @@
+## tasks/install_seaweedfs_bin.yml
+## Install weed binary only if appropriate.
+## Author Ctrl-S
+---
+- name: "Prep dir(s)"
+  ansible.builtin.file:
+    state: 'directory'
+    owner: "root"
+    group: "{{ group }}"
+    mode: 'u=rwx,g=rx,o=rx'
+    path: "{{ weed_install_work_dir }}"
+
+- name: "prepare filename for weed executable"
+  ansible.builtin.set_fact:
+    ## Filename for this version of the binary executable:
+    weed_install_binary_filename: "weed-linux_amd64_large_disk-v{{ weed_latest_release }}"
+
+
+## ==========< Tests to determine if install is needed  >========== ##
+- name: 'Check if previously installed this version of binary - check'
+  ansible.builtin.stat:
+    path: "/usr/local/bin/weed-linux_amd64_large_disk-v{{ weed_latest_release }}"
+  register: installed_bin
+
+- name: 'Check if previously installed binary - show'
+  ansible.builtin.debug:
+    var: installed_bin
+
+- name: 'Check if previously downloaded release - check'
+  ansible.builtin.stat:
+    path: "{{ weed_install_work_dir }}/linux_amd64_large_disk-v{{ weed_latest_release }}.tar.gz"
+  register: downloaded_release
+
+- name: 'Check if previously downloaded release - show'
+  ansible.builtin.debug:
+    var: downloaded_release
+
+- name: 'Decide whether to download weed'
+  ansible.builtin.set_fact:
+    download_weed="{{ ((not downloaded_release.stat.exists) and (not installed_bin.stat.exists)) }}"
+
+- name: 'Does weed need downloading?'
+  ansible.builtin.debug:
+    var: download_weed
+## ==========< /Tests to determine if install is needed  >========== ##
+
+
+## ==========< Install seaweedfs  >========== ##
+- name: 'weed - bin - download and install'
+  ## Only do download and install if not done previously.
+  when: download_weed
+  block:
+    - name: 'weed - bin - download'
+      ansible.builtin.get_url: ## Download latest binary release.
+        url: "https://github.com/chrislusf/seaweedfs/releases/download/{{ weed_latest_release }}/linux_amd64_large_disk.tar.gz"
+        dest: "{{ weed_install_work_dir }}/linux_amd64_large_disk-v{{ weed_latest_release }}.tar.gz"
+        # timeout: 300
+        force: false
+        owner: "{{ user }}"
+        group: "{{ group }}"
+        mode: 'u=rw,g=r,o=r'
+      ignore_errors: "{{ ansible_check_mode }}" ## Dir might not exist when testing.
+      when: "{{ not ansible_check_mode }}" ## Don't hammer github wheile testing.
+
+    - name: 'weed - bin - extract'
+      ansible.builtin.unarchive:
+        remote_src: true
+        src: "{{ weed_install_work_dir }}/linux_amd64_large_disk-v{{ weed_latest_release }}.tar.gz"
+        dest: "{{ weed_install_work_dir }}/"
+      ignore_errors: "{{ ansible_check_mode }}" ## File might not exist when testing.
+
+    - name: 'weed - bin - rename pt1 (copy) '
+      ansible.builtin.copy:
+        remote_src: true
+        src: "{{ weed_install_work_dir }}/weed"
+        dest: "{{ weed_install_work_dir }}/{{ weed_install_binary_filename }}"
+        owner: "{{ user }}"
+        group: "{{ group }}"
+        mode: 'u=rwx,g=rx,o=rx'
+      ignore_errors: "{{ ansible_check_mode }}" ## File might not exist when testing.
+    
+    - name: 'weed - bin - rename pt2 (delete origin)'
+      ansible.builtin.file:
+        path: "{{ weed_install_work_dir }}/weed"
+        state: absent
+
+    - name: 'weed - bin - copy to systemwide' ## File might not exist when testing.
+      ansible.builtin.copy:
+        remote_src: true
+        src: "{{ weed_install_work_dir }}/{{ weed_install_binary_filename }}"
+        dest: "/usr/local/bin/{{ weed_install_binary_filename }}"
+        owner: "root"
+        group: "{{ group }}"
+        mode: 'u=rx,g=rx,o=rx'
+        setype: "bin_t" # Executable.
+      ignore_errors: "{{ ansible_check_mode }}" ## File might not exist when testing.
+
+    - name: 'weed - bin - symlink'
+      ansible.builtin.file:
+        dest: "/usr/local/bin/weed"
+        src: "/usr/local/bin/{{ weed_install_binary_filename }}"
+        state: link
+      ignore_errors: "{{ ansible_check_mode }}" ## File might not exist when testing.
+
+    - name: 'weed - bin - testrun.1'
+      ansible.builtin.shell: '/usr/local/bin/weed version'
+      register: weed_install_test_cmd_result
+
+    - name: 'weed - bin - testrun.2'
+      ansible.builtin.debug:
+        var: weed_install_test_cmd_result
+
+    - name: 'weed - bin - testrun.3'
+      ansible.builtin.assert:
+        that: "'{{ weed_latest_release }}' in weed_install_test_cmd_result.stdout"
+      ignore_errors: "{{ ansible_check_mode }}" # Will fail if command did not run for check mode.
+## ==========< /Install seaweedfs  >========== ##

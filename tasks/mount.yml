@@ -1,0 +1,23 @@
+## tasks/mount.yml
+## weed FUSE mount
+---
+- name: 'Seaweedfs FUSE mountpoint parent dir exists'
+  ansible.builtin.file:
+    state: 'directory'
+    owner: "root"
+    group: "{{ group }}"
+    mode: 'u=rwX,g=rwX,o=' # 'X' = Set dirs listable.
+    path: "{{ item }}"
+  with_items:
+    - "/weedmnt/" ## FUSE Mountpoints parent dir
+
+# - name: 'Seaweedfs FUSE mountpoint dirs exist' #TODO: Copy perms from prod
+#   ansible.builtin.file:
+#     state: 'directory'
+#     owner: "root"
+#     group: "{{ group }}"
+#     mode: 'u=rwX,g=rwX,o=rX' # 'X' = Set dirs listable.
+#     path: "{{ item }}"
+#   with_items:
+#     - "/weedmnt/asagi" ## Asasgi 4ch scraper.
+#     - "/weedmnt/filer-root" ## Root-level of filer.

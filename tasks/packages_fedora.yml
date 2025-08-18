@@ -1,0 +1,25 @@
+---
+- name: '[Fedora] packages'
+  ansible.builtin.dnf:
+    state: present
+    name:
+      - git
+      - python3
+      - python3-pip
+      - "perl" ## Used for unit conversion in volume list helper.
+      # TODO: Replace with systemd units!
+      ## https://unix.stackexchange.com/questions/568273/crontab-command-missing-in-fedora-31
+      ## For cronjobs:
+      - cronie
+      - cronie-anacron
+      ## Log rotation
+      - logrotate
+      ## Required for FUSE mount ($ weed mount):
+      - fuse
+      - fuse-common
+      ## For s3 interaction:
+      - 's3cmd' ## https://pkgs.org/download/s3cmd
+      ## Used for offsite filermeta backup.
+      - 'rclone'
+      - 'rsync'
+  when: ansible_facts['os_family'] == 'RedHat'

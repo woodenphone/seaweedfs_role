@@ -1,0 +1,57 @@
+---
+# tasks file for seaweedfs
+
+## Collate and generate variables:
+- name: 'Install seaweedfs'
+  ansible.builtin.include_tasks:
+    file: 'variables.yml'
+
+## Required packages:
+- ansible.builtin.include_tasks: "packages_debian.yml"
+  when: ansible_facts['os_family'] == 'Debian'
+
+- ansible.builtin.include_tasks: "packages_fedora.yml"
+  when: ansible_facts['os_family'] == 'RedHat'
+
+### User & group for seaweedfs
+- name: 'User & group for seaweedfs'
+  ansible.builtin.include_tasks:
+    file: 'users.yml'
+
+
+## Download seaweedfs and certstrap
+- name: 'Install seaweedfs'
+  ansible.builtin.include_tasks:
+    file: 'install_seaweedfs_bin.yml'
+
+- name: 'Install certstrap'
+  ansible.builtin.include_tasks:
+    file: 'install_certstrap_bin.yml'
+
+# - name: 'Security configuration'
+#   ansible.builtin.include_tasks:
+#     file: 'security.yml'
+
+- name: 'Weed FUSE Mounts'
+  ansible.builtin.include_tasks:
+    file: 'mount.yml'
+
+- name: 'Weed Filer(s)'
+  ansible.builtin.include_tasks:
+    file: 'filer.yml'
+
+- name: 'Weed Volume(s)'
+  ansible.builtin.include_tasks:
+    file: 'volume.yml'
+
+# - name: 'Log cleanup'
+#   ansible.builtin.include_tasks:
+#     file: 'log_cleanup.yml'
+
+# - name: 'Filermeta backups'
+#   ansible.builtin.include_tasks:
+#     file: 'filermeta_backup.yml'
+
+# - name: 'Helper scripts'
+#   ansible.builtin.include_tasks:
+#     file: 'scripts.yml'
