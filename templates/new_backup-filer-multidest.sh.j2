@@ -1,0 +1,193 @@
+#!/bin/bash
+# ---------------------------------------- #
+# This file is managed by ansible.
+# template: {{ template_path | quote }}
+# destpath: {{ template_destpath | quote }}
+# host: {{ template_host | quote }}
+# commit: {{ lookup('pipe', 'git rev-parse --verify HEAD') | quote }}
+# ---------------------------------------- #
+## (Template file)
+## LICENSE: TODO
+## AUTHOR: Ctrl-S
+## CREATED: Before 2025.
+## UPDATED: 2025-08-18
+# ---------------------------------------- #
+
+## ==========< Config vars >========== ##
+logfile="/var/log/seaweedfs/backup-filer-multidest.log" ## To be sure we know what's going on.
+minimum_backup_size_bytes="1048576" ## (1MB) Skip backup if below this size.
+## ==========< /Config vars >========== ##
+
+## ==========< Functions >========== ##
+function myecho() {
+	## echo with suffix and prefix to STDERR
+	echo "[${0##*/}]" ${@} | tee -a ${logfile?} >&2
+}
+
+function myechod() {
+	## echo with suffix and prefix to STDERR
+	echo "[${0##*/}]" ${@} "at $(date '+(%Y-%m-%dt%H%M%S%z=@%s)')" | tee -a ${logfile?} >&2
+}
+
+function fs_gate() { ## WIP
+	## Test if a file is at least some specified size.
+	## Status 0 (True) if size over given, nonzero otherwise.
+	## Function params:
+	local filepath="${1?}" ## Filepath to test.
+	local size_threshold="${2?}" ## Minimum size in bytes.
+	echo "[${BASH_SOURCE[0]}:${FUNCNAME[0]}:${LINENO}] params: filepath=${filepath@Q}; size_threshold=${size_threshold@Q};" >&2 # Log params.
+	## Measure size:
+	## https://www.man7.org/linux/man-pages/man1/stat.1.html
+	local measured_size="$(stat -c '%s' file.txt)"
+	echo "[${BASH_SOURCE[0]}:${FUNCNAME[0]}:${LINENO}] filepath=${filepath@Q}; size_threshold=${size_threshold@Q}; measured_size=${measured_size@Q};" >&2
+	## Compare size:
+	if [[ ${measured_size?} -lt ${size_threshold?} ]] ; then
+		return 1 # Failed test.
+	fi
+	return 0 # Passed test.
+}
+
+function backup_rotate() { ## WIP
+	## Copy a file to a backup dest, requiring minimum size, rotating to retain some number of previous versions. 
+	## Function params:
+	local src_filepath="${1?}"
+	local dest_dir="${2?}"
+	local num_versions="${3?}"
+	local minimum_filsize="${4?}"
+	echo "[${BASH_SOURCE[0]}:${FUNCNAME[0]}:${LINENO}] params: src_filepath=${src_filepath@Q}; dest_dir=${dest_dir@Q}; num_versions=${num_versions@Q}; minimum_filsize=${minimum_filsize@Q}" >&2 # Log params.
+	
+	## Skip if too small:
+	local measured_size="$(stat -c '%s' file.txt)"
+	if [[ ${measured_size?} -lt ${minimum_filsize?} ]] ; then
+		echo "[${BASH_SOURCE[0]}:${FUNCNAME[0]}:${LINENO}] Error: File too small, skipping. ( src_filepath=${src_filepath@Q} measured_size==${measured_size} smaller than minimum_filsize=${minimum_filsize?} )" >&2
+		return 1 # Failure.
+	fi
+
+	## Remove oldest version:
+	rm -v "${destfile}.${num_versions?}"
+
+	## Rotate past versions:
+	for local a in ${num_versions}..1..0; do
+		local b="$(( ${a?} + 1 ))" ## Previous a
+		mv -v "${bkup_destfile}.${b?}" "${destfile?}.${a?}"
+	done
+	## Copy latest version into place:
+	cp -v "${src_filepath?}" "${bkup_destfile?}"
+}
+## ==========< /Functions >========== ##
+
+
+## ==========< Welcome message >========== ##
+## Record information about this run itself for possible later diagnostics.
+myechod "Starting"
+myecho "hostname=${HOSTNAME@Q}"
+myecho "USER=${USER@Q}"
+myecho "id: $(id)"
+## ==========< /Welcome message >========== ##
+
+
+## ==========< Mutex >========== ##
+## Prevent multiple instances of this script from running at any one time.
+## From: http://mywiki.wooledge.org/BashFAQ/045
+myechod "Mutex start"
+# POSIX (maybe Bourne?)
+lockdir=/tmp/${0##*/}.lock
+myecho "lockdir=${lockdir@Q}"
+if mkdir -- "$lockdir"
+then
+		printf >&2 'successfully acquired lock\n'
+
+		# Remove lockdir when the script finishes, or when it receives a signal
+		trap 'rm -rf -- "$lockdir"' 0    # remove directory when script finishes
+else
+		printf >&2 'cannot acquire lock, giving up on %s\n' "$lockdir"
+		exit 0
+fi
+myechod "Mutex finish"
+## ==========< /Mutex >========== ##
+
+
+## ==========< Dump filer >========== ##
+## Dump a copy of the filer metadata to a temporary location.
+myecho "Dumping filermeta to staging location" "{{ filermeta_backup_tempfile }}"
+
+## Ensure dump path is unused
+rm -vf {{ filermeta_backup_tempfile }}
+
+## Create new filer backup
+echo "fs.meta.save -o {{ filermeta_backup_tempfile }}" | weed shell -master={{filer_backup_master | quote }} -filer={{filer_backup_filer | quote }}
+
+## Show filer dump worked
+ls -nQF {{ filermeta_backup_tempfile }}
+
+## Gate backup size above minimum threshold
+if [[ ! $(fs_gate "{{ filermeta_backup_tempfile }}" "${minimum_backup_size_bytes?}") ]]; ## If filesize is large enough.
+		myechod "Error! dumped filermeta was too small. Skipping backup."
+		exit 1 # Failure.
+fi
+## ==========< /Dump filer >========== ##
+
+
+## ==========< Local disks >========== ##
+## Store copy(s) of filer metadata to backup destination disk(s).
+{{ filermeta_backup_destdirs | to_nice_json(indent=2) | comment }}
+{# Require a list, treat any other datatype as "disable this section". #}
+{% if ( ( filermeta_backup_destdirs | type_debug )  ==  "list" ) %}
+	myechod "Copying backup to volume HDDs"
+	{% for destdir in filermeta_backup_destdirs %}
+
+		## * * * * * * * * * *
+		## destdir: {{ destdir }}
+		bkup_dest="{{ destdir }}/{{ filermeta_backup_tempfile | basename }}"
+		myecho "bkup_dest=$bkup_dest"
+		myechod "Updating backups in {{ destdir }}"
+		
+		## Retain 3 previous versions (by renaming old version)
+		rm -vf "${bkup_dest}.old3"
+		mv -v "${bkup_dest}.old2" "${bkup_dest}.old3"
+		mv -v "${bkup_dest}.old" "${bkup_dest}.old2"
+		mv -v "${bkup_dest}" "${bkup_dest}.old"
+		cp -v "{{ filermeta_backup_tempfile }}" "${bkup_dest}"
+		
+		## Show backup versions
+		ls -nQF "{{ destdir }}"
+		myecho "Finished updating backups in" "{{ destdir }}"
+
+	{% endfor %}
+
+	myechod "Done copying backup to local disks"
+{% endif %}
+## ==========< /Local disks >========== ##
+
+
+## ==========< rclone remotes >========== ##
+{{ filermeta_backup_rclone_dests | to_nice_json(indent=2) | comment }}
+{# Require a list, treat any other datatype as "disable this section". #}
+{% if ( ( filermeta_backup_rclone_dests | type_debug )  ==  "list" ) %}
+	myechod "Copying backup to cloud dests"
+	{% for rclone_dest in filermeta_backup_rclone_dests %}
+
+		## * * * * * * * * * *
+		## rclone_dest: {{ rclone_dest }}
+		myecho "Uploading to" "{{ rclone_dest }}"
+		## See:  https://rclone.org/flags/
+		## --rc is required to allow changing settings mid-run e.g. bwlimit
+		rclone --rc --rc-addr={{ rclone_rc_addr | quote }} \
+			--config={{ rclone_config_filepath | quote }} \
+			--bwlimit={{ rclone_bwlimit | quote }} \
+			--checksum \
+			copy \
+			"{{ filermeta_backup_tempfile }}" \
+			{{ rclone_dest | quote }}
+
+		myechod "Listing files in" "{{ rclone_dest }}"
+		rclone --config={{ rclone_config_filepath | quote }} lsf -F'tsp' {{ rclone_dest | quote }}
+
+	{% endfor %}
+	myecho "Done copying backup to cloud dests"
+{% endif %}
+## ==========< /rclone remotes >========== ##
+
+
+## Show script ran to the end of file
+myechod "Finished"

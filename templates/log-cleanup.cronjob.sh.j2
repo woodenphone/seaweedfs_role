@@ -1,4 +1,5 @@
 #!/bin/bash
+## log-cleanup.cronjob.sh
 # ---------------------------------------- #
 # This file is managed by ansible.
 # template: {{ template_path | quote }}
@@ -9,12 +10,11 @@
 ## Script to perform automated pruning of old seaweedfs log files.
 ## (Might be run by something other than cron)
 ## -FOOdepth 2 -> (/var/log/)SERVICE.1/FILE.2
-# ---------------------------------------- #
 
 find -P \
 	{{ logdir | quote }} \
-	-mindepth 2 \
-	-maxdepth 2 \
+	-mindepth 1 \
+	-maxdepth 4 \
 	-type f \
 	-cmin +{{ max_logfile_age_cmin | quote }} \
 	-mtime +{{ max_logfile_age_mtime | quote }} \

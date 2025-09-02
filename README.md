@@ -1,7 +1,15 @@
-Role Name
+seaweedfs_role
 =========
 
-A brief description of the role goes here.
+Role to install seaweedfs and certstrap, as well as create services to run seaweedfs.
+
+WIP - Not ready for use.
+
+Major tasks
+------------
+- TODO: At least one test in some throaway container or something.
+- TODO: Development tooling setup + config.
+- TODO: Transcribe / copypaste more of my code from my playbook(s) into a role.
 
 Requirements
 ------------
@@ -22,15 +30,16 @@ Example Playbook
 ----------------
 
 Including an example of how to use your role (for instance, with variables passed in as parameters) is always nice for users too:
-
+```ansible
     - hosts: servers
       roles:
-         - { role: username.rolename, x: 42 }
+         - { role: seaweedfs_role, x: 42 }
+```
 
 License
 -------
 
-BSD
+TODO: Choose a license.
 
 Author Information
 ------------------

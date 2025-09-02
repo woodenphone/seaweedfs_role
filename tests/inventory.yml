@@ -1,0 +1,8 @@
+## tests/inventory.yml
+## Ansible inventory yaml file.
+---
+inventory:
+  hosts:
+    localhost:
+      ansible_user: ""
+      ansible_password: ""

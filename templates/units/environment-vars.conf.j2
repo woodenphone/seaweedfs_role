@@ -1,0 +1,26 @@
+
+# ---------------------------------------- #
+# systemd unit config file
+# ----------
+# This file is managed by ansible.
+# template file: {{ template_path | quote }}
+# destpath: {{ template_destpath | quote }}
+# host: {{ template_host | quote }}
+# commit: {{ lookup('pipe', 'git rev-parse --verify HEAD') | quote }}
+# ----------
+# see: Systemd Unit configuration logic -- http://man7.org/linux/man-pages/man5/systemd.unit.5.html for more details
+# - https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html#Command%20lines
+# - https://fedoraproject.org/wiki/Packaging:Systemd
+# This file would be located at "/etc/systemd/system/myservice.service.d/foo.conf"
+# ---------------------------------------- #
+
+
+[Service]
+## e.g. Environment="VAR_NAME=VALUE"
+{# Generate environment var directive for each given tuple ('WEED_MASTER_IP', '127.0.0.1') #}
+{% for var_name, var_value in item.env_var_tuples %}
+    {% if var_name is defined and var_name is not none %}
+        {# TODO: Check quoting is correct. #}
+        Environment="{{ var_name }}={{ var_value | quote }}"
+    {% endif %}
+{% endfor %}

@@ -1,0 +1,39 @@
+#!/usr/bin/env logrotate
+## /etc/logrotate.d/seaweedfs
+# ---------------------------------------- #
+# This file is managed by ansible.
+# This file is managed by ansible.
+# template file: {{ template_path | quote }}
+# destpath: {{ template_destpath | quote }}
+# host: {{ template_host | quote }}
+# commit: {{ lookup('pipe', 'git rev-parse --verify HEAD') | quote }}
+# ---------------------------------------- #
+
+## Compress logs, keep for a week:
+{{logdir}}/*/*.log.* {
+	## Tack on date and put in old/
+	olddir old/
+	dateext
+	## Discard after 7 days
+	daily
+	rotate 7
+	maxage 7
+	## Weed might be running when we rotate
+	copytruncate
+	missingok
+	## Compress to save space
+	compress
+	delaycompress
+}
+
+## Discard massive files:
+{{logdir}}/*/old/* {
+	daily
+	size 64M
+	## Delete the file:
+	nocopy
+	missingok
+	prerotate
+	/bin/rm
+	endscript
+}

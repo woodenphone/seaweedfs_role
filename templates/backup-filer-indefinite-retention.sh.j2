@@ -1,0 +1,228 @@
+#!/usr/bin/env bash
+## backup-filer-indefinite-retention.sh
+## From templates/backup-filer-indefinite-retention.sh.j2
+## (Shell script from jinja2 template)
+## ======================================== ##
+## Backup seaweedfs filer metadata, with indefinite retention.
+## ======================================== ##
+{{ ansible_managed | comment }}
+## ======================================== ##
+## USAGE:
+## Method 1: (Reccomended)
+##   Execute script from service+timer or cronjob
+##
+## Method 2: (What service does)
+##   seaweedfs$ ./backup-filer-indefinite-retention.sh
+##
+## Method 3: (Manual run)
+##   sudoer$ sudo -iuseaweedfs ./backup-filer-indefinite-retention.sh
+## ======================================== ##
+## CAUTION / NOTES:
+## * This script should only be run as user 'seaweedfs' to ensure file ownership stays correct.
+## 
+## * It is up to the user / system administrator to prune old backups to avoid disks filling.
+## ======================================== ##
+## (Template file is authorative)
+## LICENSE: GPLv3
+## AUTHOR: Ctrl-S
+## CREATED: 2025-01-29
+## MODIFIED: 2025-01-29
+## ======================================== ##
+
+
+## ==========< Shell setup >========== ##
+## Safety rails for shell scripting.
+## * https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html
+# set -o noclobber  # Avoid overlay files (echo "hi" > foo)
+set -o errexit    # Used to exit upon error, avoiding cascading errors
+set -o pipefail   # Unveils hidden failures
+set -o nounset    # Exposes unset variables
+## Shell special vars:
+# PATH="$HOME/.local/bin:$HOME/bin:$HOME/.local/bin:$HOME/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin"
+## Tracing
+# set -o verbose ## Print shell input lines as they are read. (set -v)
+# set -o xtrace # Print a trace of simple commands. (set -x) (Uses $PS4)
+# PS4='+ ' # Default value; (used for -x / XTRACE). Like: '+++ STATEMENT...'
+# PS4='+ $LINENO: ' ## Like: '+++ <CURRENT_LINENO> STATEMENT...'
+# PS4='+ ${BASH_SOURCE[0]}|${FUNCNAME[0]}()@${BASH_LINENO[0]}:ln${LINENO} ' ## Like: ' '+ FILE|FUNC()@FUNC_LINENO:CURRENT_LINENO STATEMENT...'
+# PS4='+ ${BASH_SOURCE[0]} ln${LINENO} ' ## Like: '+++ <FILE> ln<CURRENT_LINENO> STATEMENT...'
+## ==========< /Shell setup >========== ##
+
+
+## ==========< Functions >========== ##
+## Function declarations
+function myecho() {
+	## echo with suffix and prefix to STDERR
+	echo "##[${0##*/}]" ${@} >&2
+}
+
+function myechod() {
+	## echo with suffix and prefix to STDERR
+	echo "##[${0##*/}]" ${@} "at $(date '+(%Y-%m-%dt%H:%M%S%z @%s)')" >&2
+}
+
+func_rclone_push() {
+	myecho "${FUNCNAME[0]} Called with func_params=(${@[*]@Q});"
+	local config_filepath="${1?}"
+	local rc_addr="${2?}"
+	local bwlimit="${3?}"
+	local source="${4?}"
+	local dest="${5?}"
+	## -----< Copy >----- ##
+	myecho "Uploading to dest=${dest@Q}"
+	local rclone_copy_params=( ## See: https://rclone.org/flags/
+		## $ rclone 
+		## --rc is required to allow changing settings mid-run e.g. bwlimit
+		--rc --rc-addr="${rc_addr?}"
+		--config="${config_filepath?}"
+		--bwlimit="${bwlimit:-10M}"
+		--checksum
+		## Operation:
+		copy
+		## Source:
+		"${source?}"
+		## Dest
+		"${dest?}"
+	)
+	myechod "rclone_copy_params=${rclone_copy_params@Q}"
+	time rclone "${rclone_copy_params[@]}" 
+	## -----< /Copy >----- ##
+	#
+	## -----< Check >----- ##
+	myechod "Listing files in dest=${dest@Q}"
+	local rclone_lsf_params=(
+		## $ rclone 
+		--config="${config_filepath?}"
+		## Operation:
+		lsf
+		-F'tsp'
+		## Target:
+		"${dest?}"
+	)
+	myechod "rclone_params=${rclone_lsf_params@Q}"
+	time rclone "${rclone_lsf_params[@]}" 
+	## -----< /Check >----- ##
+	myechod "${FUNCNAME[0]} returning"
+}
+## ==========< /Functions >========== ##
+
+
+## ==========< Welcome message >========== ##
+## Indicate script start and run conditions
+myechod "Starting as ${USER}@${HOSTNAME}:$PWD"
+## ==========< /Welcome message >========== ##
+
+
+## ==========< Prepare vars >========== ##
+## Vars from ansible:
+weed_filer={{filer_backup_filer | quote }}
+weed_master={{filer_backup_master | quote }}
+backup_tempdir={{ filermeta_backup_tempdir | quote}} # Dir filemeta is dumped to before copying.
+backup_basename={{ FIXME | basename | quote }}
+## rclone-related:
+rclone_rc_addr={{ rclone_rc_addr | quote }}
+rclone_config_filepath={{ rclone_config_filepath | quote }}
+rclone_bwlimit={{ rclone_bwlimit | quote }}
+
+## Vars at runtime:
+filename_timestamp="$(date '+%Y-%m-%dT%H%M%S%Z')"
+backup_filename="${backup_basename:-NO_NAME}.indefinite_retention.${filename_timestamp?}.filermeta"
+backup_tempfile="${backup_tempdir:-$PWD}/indefinite_retention.filermeta.tmp" # Filename of the backup made this run.
+## ==========< Prepare vars >========== ##
+
+
+## ==========< Abort if no work >========== ##
+## Abort if ansible has no destinations set.
+## Playbook should also impliment this check and remove this sccript and associated unit files if no work to do.
+
+## Work to do:
+{{ filermeta_backup_destdirs_noclobber | to_nice_json(indent=2) | comment }}
+{{ filermeta_backup_rclone_dests_noclobber | to_nice_json(indent=2) | comment }}
+
+{# Check if any destinations are set #}
+{% if ( ( filermeta_backup_destdirs_noclobber | type_debug )  ==  "list")
+	and ( ( filermeta_backup_destdirs_noclobber | length )  !=  0 )
+	and ( ( filermeta_backup_rclone_dests_noclobber | type_debug )  ==  "list" )
+	and ( ( filermeta_backup_rclone_dests_noclobber | length )  !=  0 )
+%}
+	myechod "No work to do! Exiting script."
+	exit
+{% else %}
+	## No need to exit at this point
+{% endif %}
+
+## ==========< /Abort if no work >========== ##
+
+
+## ==========< Dump filer >========== ##
+## Filer is dumped to temporary location as an optimization method, 
+## due to filer dumping being a more expensive process than simple data copy.
+myecho "Dumping filermeta to staging location backup_tempfile=${backup_tempfile@Q}"
+
+
+
+## Create new filer backup
+echo "fs.meta.save -o ${backup_tempfile?}" | weed shell "-master=${weed_master?}" "-filer={weed_filer?}"
+
+myechod "ls of backup_tempfile=${backup_tempfile@Q}"
+ls -nQF "${backup_tempfile?}" >&2
+## ==========< /Dump filer >========== ##
+
+
+
+## ==========< Copy to local disks >========== ##
+## Temporary file is copied to specified local disk(s):
+{{ filermeta_backup_destdirs_noclobber | to_nice_json(indent=2) | comment }}
+{# Require a list, treat any other datatype as "disable this section". #}
+{% if ( ( filermeta_backup_destdirs_noclobber | type_debug )  ==  "list" ) %}
+	myechod "Copying backup to local disks"
+	{% for destdir in filermeta_backup_destdirs_noclobber %}
+
+		## * * * * * * * * * *
+		## destdir: {{ destdir | to_nice_json(indent=2) | comment }}
+		destdir={{ rclone_dest | quote }}
+		backup_filepath="${destdir}/${backup_filename?}"
+		myecho "Copying to backup_filepath=${backup_filepath@Q}" 
+		cp -v "${backup_tempfile?}" "${backup_filepath?}" >&2
+		
+		myechod "ls of ${backup_filepath@Q}"
+		ls -nQF "${backup_filepath?}" >&2
+
+
+	{% endfor %}
+	myechod "Done copying backup to local disks"
+{% endif %}
+## ==========< /Copy to local disks >========== ##
+
+
+## ==========< Copy to rclone remote(s) >========== ##
+## Temporary file is copied to specified rclone remote(s):
+{{ filermeta_backup_rclone_dests_noclobber | to_nice_json(indent=2) | comment }}
+{# Require a list, treat any other datatype as "disable this section". #}
+{% if ( ( filermeta_backup_rclone_dests_noclobber | type_debug )  ==  "list" ) %}
+	myechod "Copying backup to cloud dests"
+	{% for rclone_dest in filermeta_backup_rclone_dests_noclobber %}
+
+		## * * * * * * * * * *
+		## rclone_dest: {{ rclone_dest }}
+		myechod "Uploading to rclone_dest" "{{ rclone_dest | quote }}"
+		dest={{ rclone_dest | quote }}
+		func_rclone_push "${rclone_config_filepath}"  "${rclone_rc_addr?}"  "${rclone_bwlimit?}"  "${backup_tempfile?}" "${dest?}"
+
+	{% endfor %}
+	myechod "Done copying backup to cloud dests"
+{% endif %}
+## ==========< /Copy to rclone remote(s) >========== ##
+
+
+## ==========< Cleanup >========== ##
+myecho "Removing tempfile now that all dests are serviced"
+## Free space on drive used for staging
+rm -vf "${backup_tempfile?}"
+## ==========< Cleanup >========== ##
+
+
+## =========< Ending message >========== ##
+myechod "Finished. Script took $((${SECONDS?} / 86400))d $((${SECONDS?} / 3600))h $(((${SECONDS?} / 60) % 60))m $((${SECONDS?} % 60))s (${SECONDS?} seconds total) to complete)"
+## =========< /Ending message >========== ##
+exit

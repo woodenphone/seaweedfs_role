@@ -1,0 +1,106 @@
+# ---------------------------------------- #
+# This file is managed by ansible.
+# template: {{ template_path | quote }}
+# destpath: {{ template_destpath | quote }}
+# host: {{ template_host | quote }}
+# commit: {{ lookup('pipe', 'git rev-parse --verify HEAD') | quote }}
+# ---------------------------------------- #
+# see: Systemd Unit configuration logic -- http://man7.org/linux/man-pages/man5/systemd.unit.5.html for more details
+# ---------------------------------------- #
+
+{% macro input(keyname,valuename) -%}
+    {%- if foo['bar'] -%}...{% endif %}
+    {% if valuename.property is defined %}
+{%- endmacro %}
+
+
+[Unit]
+Description=Seaweedfs master.
+
+[Service]
+Type=simple
+Restart=always
+RestartSec={{ service_restartsec }}
+User={{ user }}
+Group={{ group }}
+WorkingDirectory={{ weed_conf_dir }}
+ExecStart=
+
+                {{ binary }}
+                -v={{ log_level }}
+                -alsologtostderr={{ log_stderr_bool }}
+                -stderrthreshold={{ log_stderr_threshold }}
+                -logdir={{ logdir }}/master_1
+                master
+                -ip={{ bind_ip }}
+                -ip.bind={{ bind_ip }}
+                -port=9333
+                -defaultReplication=001
+                -volumeSizeLimitMB=30000
+
+{% if bind_ip is defined and bind_ip is not none %}-ip={{ bind_ip }}{% endif %}
+{% if bind_ip is defined and bind_ip is not none %}-ip.bind={{ bind_ip }}{% endif %}
+{% if port is defined and port is not none %}-port={{ port }}{% endif %}
+
+
+{% if MYVAR is defined and MYVAR is not none %}-MYPARAM={{ MYVAR }}{% endif %}
+{% if MYVAR is defined and MYVAR is not none %}-MYPARAM={{ MYVAR }}{% endif %}
+{% if MYVAR is defined and MYVAR is not none %}-MYPARAM={{ MYVAR }}{% endif %}
+{% if MYVAR is defined and MYVAR is not none %}-MYPARAM={{ MYVAR }}{% endif %}
+
+
+ExecStart=
+{{ binary }}
+{# ----------< Log params >---------- #}
+{% for param, varname in 
+    [("v", "log_level"),
+    ("alsologtostderr", "log_stderr_bool"),
+    ("stderrthreshold", "log_stderr_threshold"),
+    ("logdir", "service_logdir")] %}
+    {% if varname is defined and varname is not none %}
+        -{{ param }}={{ varname }}
+    {% endif %}
+{% endfor %}
+{# ----------< /Log params >---------- #}
+master
+{# ----------< Command params >---------- #}
+{% for param, varname in 
+    [("ip", "bind_ip"),
+    ("ip.bind", "bind_ip"),
+    ("port", "port"),
+    ("defaultReplication", "default_replication"),
+    ("volumeSizeLimitMB", "volume_size_limit_mb"),
+    ("rack", "rack"),
+    ("", ""),
+    ("", "")]
+    %}
+    {% if varname is defined and varname is not none %}
+        -{{ param }}={{ varname }}
+    {% endif %}
+{% endfor %}
+{# ----------< /Command params >---------- #}
+
+
+{% for param, varname in 
+    [("", ""),
+    ("", ""),
+    ("", ""),
+    ("", ""),
+    ("", ""),
+    ("", ""),
+    ("", ""),
+    ("", "")]
+    %}
+    {% if varname is defined and varname is not none %}
+        -{{ param }}={{ varname }}
+    {% endif %}
+{% endfor %}
+
+LimitNOFILE=infinity
+LimitNPROC=infinity
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+TimeoutStopFailureMode=abort
